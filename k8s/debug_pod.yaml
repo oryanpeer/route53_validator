@@ -20,7 +20,7 @@ spec:
         lifecycle:
           postStart:
             exec:
-              command: ["/bin/sh", "-c", "apt update && apt install -y vim && pip3 install boto3 dnspython && git clone git@github.com:oryanpeer/route53_check.git"]
+              command: ["/bin/sh", "-c", "apt update && apt install -y vim && pip3 install boto3 dnspython && mkdir -p ~/.ssh && ssh-keyscan -t rsa github.com >> ~/.ssh/known_hosts && git clone https://github.com/oryanpeer/route53_validator.git"]
         command:
           - "sleep"
           - "604800"
