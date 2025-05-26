@@ -112,4 +112,4 @@ python3 route53_check.py --zone example.com --limit 20 --ignore '.*internal.*' -
 
 ## 📄 License
 
-MIT License — use at your own risk. Contributions welcome!# articles
+MIT License — use at your own risk. Contributions welcome!

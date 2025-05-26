@@ -1,0 +1,33 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: route53-pod
+  labels:
+    app: route53-pod
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: route53-pod
+  template:
+    metadata:
+      labels:
+        app: route53-pod
+    spec:
+      containers:
+      - name: python
+        image: python:3.13-bullseye
+        lifecycle:
+          postStart:
+            exec:
+              command: ["/bin/sh", "-c", "apt update && apt install -y vim && pip3 install boto3 dnspython && git clone git@github.com:oryanpeer/route53_check.git"]
+        command:
+          - "sleep"
+          - "604800"
+        resources:
+          requests:
+            cpu: 2
+            memory: 2Gi
+          limits:
+            cpu: 2
+            memory: 2Gi
