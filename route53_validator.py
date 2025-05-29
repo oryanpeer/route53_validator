@@ -56,36 +56,6 @@ def resolve_to_external_ip(domain, resolver_address=None):
         return None
 
 
-def resolve_cname_chain(records, domain_name, resolver_address):
-    tested_records = set()
-    current_name = normalize(domain_name)
-
-    while current_name not in tested_records:
-        tested_records.add(current_name)
-
-        match = next((r for r in records if normalize(r['Name']) == current_name), None)
-        if not match:
-            ip_list = resolve_to_external_ip(current_name, resolver_address)
-            status = "Resolved externally" if ip_list else "Does not have an IP match"
-            return current_name, status, ip_list
-
-        record_type = match['Type']
-        if record_type == 'A':
-            ip_list = resolve_to_external_ip(current_name, resolver_address)
-            status = "Externally resolvable A record" if ip_list else "A record does not resolve externally"
-            return current_name, status, ip_list
-        elif record_type == 'CNAME':
-            current_name = normalize(match['ResourceRecords'][0]['Value'])
-        else:
-            return current_name, f"Unsupported record type: {record_type}", None
-
-    return current_name, "CNAME loop detected", None
-
-
-def check_a_record(domain, resolver_address):
-    return resolve_to_external_ip(domain, resolver_address)
-
-
 def main():
     parser = argparse.ArgumentParser(description="List Route53 records and validate DNS resolution.")
     parser.add_argument('--profile', help='AWS CLI profile name')
@@ -110,30 +80,50 @@ def main():
     resolved = []
     all_results = []
     processed_count = 0
+    seen_sources = set()
 
     for record in records:
         if args.limit is not None and processed_count >= args.limit:
             break
 
+        if record['Type'] not in ('A', 'CNAME'):
+            continue
+
         source = normalize(record['Name'])
-        target = normalize(record['ResourceRecords'][0]['Value']) if record['Type'] == 'CNAME' else None
+        target = normalize(record['ResourceRecords'][0]['Value']) if 'ResourceRecords' in record and record['ResourceRecords'] else None
+
+        if source in seen_sources:
+            continue
+        seen_sources.add(source)
 
         if any(pat.search(source) or (target and pat.search(target)) for pat in ignore_patterns):
             if not args.silent:
                 print(f"⚠️ Ignored: {source} (or CNAME target) matches ignore pattern")
             continue
 
+        ip_list_source = resolve_to_external_ip(source, args.resolver)
+        final_domain = source
+        status_parts = []
+
+        if ip_list_source:
+            status_parts.append("✅ Source resolves")
+        else:
+            status_parts.append("❌ Source does not resolve")
+
+        ip_list_target = []
         if record['Type'] == 'CNAME':
             target = normalize(record['ResourceRecords'][0]['Value'])
-            final_domain, status, ip_list = resolve_cname_chain(records, target, args.resolver)
+            final_domain = target
+            ip_list_target = resolve_to_external_ip(target, args.resolver)
 
-        elif record['Type'] == 'A':
-            final_domain = source
-            ip_list = check_a_record(source, args.resolver)
-            status = "Externally resolvable A record" if ip_list else "A record does not resolve externally"
+            if ip_list_source:
+                if ip_list_target:
+                    status_parts.append("✅ Target resolves")
+                else:
+                    status_parts.append("❌ Target does not resolve")
 
-        else:
-            continue
+        ip_list = ip_list_source or []
+        status = "; ".join(status_parts)
 
         processed_count += 1
 
